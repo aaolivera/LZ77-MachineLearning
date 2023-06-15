@@ -10,7 +10,7 @@ from NeuralNetwork import build_model, get_symbol, process, reset_seed, train
 
 ## Parameters
 mode = 'both' #@param ["compress", "decompress", "both", "preprocess_only"]
-path_to_original_file = "Decompressed/file.txt"
+path_to_original_file = "Decompressed/file3.txt"
 path_to_decompressed_file = "Decompressed/decompressed.txt"
 path_to_compressed_file = "Compressed/compressed.dat" 
 

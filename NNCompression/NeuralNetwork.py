@@ -12,8 +12,6 @@ batch_size = 32768
 seq_length =  2
 #Multiplo de 8.El número de unidades a usar dentro de cada capa LSTM.
 rnn_units =  4
-#Cantidad de capas LSTM.
-num_layers = 2
 #Tamaño de la capa de incrustación.
 embedding_size=1024
 #Tasa de aprendizaje para Adam Optimizer.
@@ -28,21 +26,12 @@ def build_model(vocab_size):
   """
   policy = mixed_precision.Policy('mixed_float16')
   mixed_precision.set_global_policy(policy)
-  inputs = [
-    tf.keras.Input(batch_input_shape=[batch_size, seq_length])]
-  # In addition to the primary input, there are also two "state" inputs for each
-  # layer of the network.
-  for i in range(num_layers):
-    inputs.append(tf.keras.Input(shape=(None,)))
-    inputs.append(tf.keras.Input(shape=(None,)))
+  inputs = []
+  inputs.append(tf.keras.Input(batch_input_shape=[batch_size, seq_length]))
+  inputs.append(tf.keras.Input(shape=(None,)))
+  inputs.append(tf.keras.Input(shape=(None,)))
   embedding = tf.keras.layers.Embedding(vocab_size, embedding_size)(inputs[0])
-  # Skip connections will be used to connect each LSTM layer output to the final
-  # output layer. Each LSTM layer will get as input both the original input and
-  # the output of the previous layer.
-  skip_connections = []
-  # In addition to the softmax output, there are also two "state" outputs for
-  # each layer of the network.
-  outputs = []
+
   predictions, state_h, state_c = tf.keras.layers.LSTM(rnn_units,
                           return_sequences=True,
                           return_state=True,
@@ -50,35 +39,17 @@ def build_model(vocab_size):
                           )(embedding, initial_state=[
                           tf.cast(inputs[1], tf.float16),
                           tf.cast(inputs[2], tf.float16)])
-  skip_connections.append(predictions)
+
+  layer_input = tf.slice(predictions, [0, seq_length - 1, 0], [batch_size, 1, rnn_units])
+
+  dense = tf.keras.layers.Dense(vocab_size, name='dense_logits')(layer_input)
+
+  output = tf.keras.layers.Activation('softmax', dtype='float32', name='predictions')(dense)
+  
+  outputs = []
+  outputs.append(output)
   outputs.append(state_h)
   outputs.append(state_c)
-  for i in range(num_layers - 1):
-    layer_input = tf.keras.layers.concatenate(
-        [embedding, skip_connections[-1]])
-    predictions, state_h, state_c = tf.keras.layers.LSTM(rnn_units,
-        return_sequences=True,
-        return_state=True,
-        recurrent_initializer='glorot_uniform')(
-          layer_input, initial_state=[tf.cast(inputs[i*2+3], tf.float16),
-                                      tf.cast(inputs[i*2+4], tf.float16)])
-    skip_connections.append(predictions)
-    outputs.append(state_h)
-    outputs.append(state_c)
-  # The dense output layer only needs to be computed for the last timestep, so
-  # we can discard the earlier outputs.
-  last_timestep = []
-  for i in range(num_layers):
-    last_timestep.append(tf.slice(skip_connections[i], [0, seq_length - 1, 0],
-                                [batch_size, 1, rnn_units]))
-  if num_layers == 1:
-    layer_input = last_timestep[0]
-  else:
-    layer_input = tf.keras.layers.concatenate(last_timestep)
-  dense = tf.keras.layers.Dense(vocab_size, name='dense_logits')(layer_input)
-  output = tf.keras.layers.Activation('softmax', dtype='float32',
-                                      name='predictions')(dense)
-  outputs.insert(0, output)
   model = tf.keras.Model(inputs=inputs, outputs=outputs)
   return model
 
@@ -237,7 +208,7 @@ def process(compress, length, vocab_size, coder, data):
   # This will keep track of layer states. Initialize them to zeros.
   states = []
   for i in range(seq_length):
-    states.append([tf.zeros([batch_size, rnn_units])] * (num_layers * 2))
+    states.append([tf.zeros([batch_size, rnn_units])] * 2)
   # Keep repeating the training step until we get to the end of the file.
   while pos < split:
     seq_input, ce, d = train(pos, seq_input, length, vocab_size, coder, model,
