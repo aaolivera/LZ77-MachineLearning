@@ -206,9 +206,6 @@ def process(compress, length, vocab_size, coder, data):
   start = time.time()
   reset_seed()
   model = build_model(vocab_size = vocab_size)
-  #checkpoint_path = tf.train.latest_checkpoint('./data')
-  #if checkpoint_path:
-  #  model.load_weights(checkpoint_path)
   model.summary()
 
   # Try to split the file into equal size pieces for the different batches. The
