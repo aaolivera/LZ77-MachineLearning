@@ -24,7 +24,7 @@ def build_model(vocab_size):
     Args:
       vocab_size: Int, size of the vocabulary.
   """
-  policy = mixed_precision.Policy('mixed_float16')
+  policy = mixed_precision.Policy('float16')
   mixed_precision.set_global_policy(policy)
   inputs = []
   inputs.append(tf.keras.Input(batch_input_shape=[batch_size, seq_length]))
@@ -121,8 +121,6 @@ def train(pos, seq_input, length, vocab_size, coder, model, optimizer, compress,
     # Go over each batch to run the arithmetic coding and prepare the next
     # input.
     for i in range(batch_size):
-      # The "10000000" is used to convert floats into large integers (since
-      # the arithmetic coder works on integers).
       freq = np.cumsum(p[i][0] * 10000000 + 1)
       index = pos + 1 + i * split
       symbol = get_symbol(index, length, freq, coder, compress, data)
@@ -177,7 +175,12 @@ def process(compress, length, vocab_size, coder, data):
   start = time.time()
   reset_seed()
   model = build_model(vocab_size = vocab_size)
+  print("#####################################")
+  print("######Modelo de red neuronal#########")
+  print("#####################################")
   model.summary()
+  model.reset_states()
+  print("#####################################")
 
   # Try to split the file into equal size pieces for the different batches. The
   # last batch may have fewer characters if the file can't be split equally.
@@ -188,14 +191,10 @@ def process(compress, length, vocab_size, coder, data):
       split,
       end_learning_rate,
       power=1.0)
-  optimizer = tf.keras.optimizers.Adam(
-      learning_rate=learning_rate_fn, beta_1=0, beta_2=0.9999, epsilon=1e-5)
+  optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate_fn, beta_1=0, beta_2=0.9999, epsilon=1e-5)
   optimizer = mixed_precision.LossScaleOptimizer(optimizer)
 
-  hidden = model.reset_states()
-  # Use a uniform distribution for predicting the first batch of symbols. The
-  # "10000000" is used to convert floats into large integers (since the
-  # arithmetic coder works on integers).
+  # Use a uniform distribution for predicting the first batch of symbols.
   freq = np.cumsum(np.full(vocab_size, (1.0 / vocab_size)) * 10000000 + 1)
   # Construct the first set of input characters for training.
   symbols = []
@@ -204,15 +203,14 @@ def process(compress, length, vocab_size, coder, data):
   # Replicate the input tensor seq_length times, to match the input format.
   seq_input = tf.tile(tf.expand_dims(symbols, 1), [1, seq_length])
   pos = cross_entropy = denom = last_output = 0
-  template = '{:0.2f}%\tcross entropy: {:0.2f}\ttime: {:0.2f}'
+  template = 'Tiempo de procesamiento: {:0.2f} segs'
   # This will keep track of layer states. Initialize them to zeros.
   states = []
   for i in range(seq_length):
     states.append([tf.zeros([batch_size, rnn_units])] * 2)
   # Keep repeating the training step until we get to the end of the file.
   while pos < split:
-    seq_input, ce, d = train(pos, seq_input, length, vocab_size, coder, model,
-                             optimizer, compress, data, states)
+    seq_input, ce, d = train(pos, seq_input, length, vocab_size, coder, model, optimizer, compress, data, states)
     cross_entropy += ce
     denom += d
     pos += 1
@@ -223,8 +221,8 @@ def process(compress, length, vocab_size, coder, data):
       last_output = time_diff
       percentage = 100 * pos / split
       if percentage >= 100: continue
-      print(template.format(percentage, -cross_entropy / denom, time_diff))
+      print(template.format(time_diff))
   if compress:
     coder.finish()
-  print(template.format(100, -cross_entropy / length, time.time() - start))
+  print(template.format(time.time() - start))
 
