@@ -131,7 +131,8 @@ class ArithmeticEncoder(ArithmeticCoderBase):
 	
 	
 	def shift(self):
-		bit = self.low >> (self.num_state_bits - 1)
+		#desplazamos low self.num_state_bits - 1 bits a la derecha
+		bit = self.low >> (self.num_state_bits - 1) 
 		self.output.write(bit)
 		
 		# Write out the saved underflow bits

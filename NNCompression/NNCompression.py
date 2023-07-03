@@ -13,15 +13,15 @@ from NeuralNetwork import build_model, get_symbol, process, reset_seed, train
 path_to_original_file = "Decompressed/file.txt"
 
 def Comprimir():
+    #Apertura del archivo a comprimir y cargar sarta a memoria
     input_path = input("Path del archivo a comprimir (default: " + path_to_original_file + "):")
     if input_path == "":
       input_path = path_to_original_file
     
-    #Apertura del archivo a comprimir y cargar sarta a memoria
     text = open(input_path, 'rb').read()
+    # Generamos diccionario para convertir el vocabulario de entrada al vocabulario numerico de la red neuronal
     vocab = sorted(set(text))
     vocab_size = len(vocab)
-    # Generamos diccionario para convertir el vocabulario de entrada al vocabulario numerico de la red neuronal
     char2idx = {u:i for i, u in enumerate(vocab)}
     # Convertimos la sarta de entrada en una nueva sarta numerica (int_list).
     int_list = []
